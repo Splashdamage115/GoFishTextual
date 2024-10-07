@@ -1,8 +1,10 @@
 from textual.app import App, ComposeResult
-from textual.containers import ScrollableContainer, Horizontal, VerticalScroll, Container
-from textual.widgets import Header, Footer, RadioButton, Static, RadioSet, Button, Label
+from textual.containers import Container
+from textual.widgets import Header, Footer, Static, Button, Label, LoadingIndicator
+from textual.timer import Timer
 import cards 
 import random
+import asyncio
 
 
 computer = []
@@ -11,6 +13,7 @@ player =[]
 player_pairs = []
 deck =[]
 computerRequest = ""
+secondaryText = False
 
 def dealCards():
     global computer
@@ -65,27 +68,30 @@ def playerFetchCard(pressed):
     choice = pressed
     selection = player[ int(choice) ]
     value = selection[: selection.find(" ")]
-    
+    text = ""
+
     found_it = False
     for n, card in enumerate(computer):
         if card.startswith(value):
             found_it = n
             break
+    
+    global secondaryText 
 
     if isinstance(found_it, bool):
         # go fish code
-        print("\nGo Fish\n")
+        text = "\nGo Fish\n"
         player.append(deck.pop())
-        print(f"You drew a {player[-1]}")
+        secondaryText = f"You drew a {player[-1]}"
         if len(deck) == 0:
             endGame()
     else:
         # swap code
-        print(f"Here is your card: {computer[n]}.")
+        text = f"Here is your card: {computer[n]}."
         player.append(computer.pop(n))
 
     checkHandLength()
-    
+    return text
 
 
 
@@ -130,6 +136,7 @@ class AskForCard(Static):
 
     def redrawCards(self):
         global player
+        #player = ["Ace", "King", "Queen", "Jack", "2", "3", "4" ,"5", "6", "7", "8", "9", "10"]
         for i, button in enumerate(self.buttons):
             if i < len(player):
                 button.display = True
@@ -140,6 +147,9 @@ class AskForCard(Static):
     def compose(self) -> ComposeResult:
         global player
         """The most cards you can have is 13, so we make 13 buttons"""
+        text = Label("What card will you ask for?", id="Text")
+        text.styles.align = ("center","middle")
+        yield text
         container = Container(id="box")
         self.buttons = []
         yield container
@@ -147,9 +157,11 @@ class AskForCard(Static):
 
     def on_mount(self):
         box = self.query_one("#box")
+        box.styles.layout = "grid"
+        box.styles.grid_size_columns = 4
+        box.styles.grid_size_rows = 5
         box.styles.align = ("center", "middle")
-        box.styles.justify_content = "center"
-        box.styles.align_items = "center"
+
 
         for c in ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "nineth", "tenth", "eleventh", "twelth", "thirteenth"]:
                  self.buttons.append(Button(c, id=c))
@@ -167,9 +179,10 @@ class AskForCard(Static):
                 if event.button.id == n:
                     selected = i
                     break
+            
+            text = playerFetchCard(selected)
 
-            playerFetchCard(selected)
-            self.parentClass.remove_cardRequest()
+            self.parentClass.moveToNext(self.parentClass.remove_cardRequest, text)
     
 
 
@@ -189,8 +202,13 @@ class ConfirmDraw(Static):
     def DisplayHand(self):
         global player
         hand = ""
+        skipLineCounter = 0
         for i in player:
             hand += f"{i}, "
+            skipLineCounter += 1
+            if skipLineCounter > 6:
+                hand += "\n"
+                skipLineCounter = 0
         hand = hand.removesuffix(", ")
         self.hand.update(f"Your Hand : \n {hand}")
 
@@ -208,11 +226,15 @@ class ConfirmDraw(Static):
         self.parentClass = parent
 
     def on_button_pressed(self, event):
+        global computerRequest
+        text = ""
         if event.button.id == "Yes":
             CheckRequstCardComputer()
+            text = f"Recieves {computerRequest}"
         else:
             ComputerGoFish()
-        self.parentClass.remove_cardConfirm()
+            text = "FISHING!"
+        self.parentClass.moveToNext(self.parentClass.remove_cardConfirm, text)
 
     def on_mount(self):
         deckContainer = self.query_one("#deck_container")
@@ -238,17 +260,15 @@ class ConfirmDraw(Static):
         self.buttons.append(Button(label="No", variant="error"))
         buttonContainer.mount(self.buttons[-1])
 
-
 class RestartScreen(Static):
-
     def changeText(self):
         global player_pairs, computer_pairs
         if len(player_pairs) == len(computer_pairs):
-            self.winnerText.update("It Was A Draw!")
+            self.winnerText.update("Draw! You both Suck")
         elif len(player_pairs) > len(computer_pairs):
-            self.winnerText.update("The Player has Won!")
+            self.winnerText.update("You Won, but barely")
         else:
-            self.winnerText.update("The Computer has Won!")
+            self.winnerText.update("The Computer has proven it is superior\nby Winning")
 
     def compose(self) -> ComposeResult:
         self.buttons = []
@@ -283,6 +303,59 @@ class RestartScreen(Static):
         else:
             exit()
 
+class LoadScreen(Static):
+    def compose(self) -> ComposeResult:
+        self.container = Container(id="textContainer")
+        yield self.container
+        self.LoadContainer = Container(id="LoadContainer")
+        yield self.LoadContainer
+        self.container.display = False
+
+    def displayText(self):
+        self.loader.display = False
+        self.container.display = True
+    
+    
+    def moveOn(self):
+        self.loader.display = True
+        self.container.display = False
+        self.callBack()
+
+    def secondaryText(self):
+        self.setString(self.secondText)
+
+    async def startWaitForLoad(self):
+        global secondaryText 
+        self.secondText = secondaryText
+        secondaryText = False
+        await asyncio.sleep(1)
+        self.displayText()
+        await asyncio.sleep(1)
+        if self.secondText:
+            self.secondaryText()
+            await asyncio.sleep(1)
+        self.moveOn()
+
+    def setParent(self, parent):
+        self.parentClass = parent
+    
+    def callBackFunction(self, func):
+        self.callBack = func
+    
+    def setString(self, displayString):
+        self.disp.update(displayString)
+
+
+    def on_mount(self):
+        bound = self.query_one("#textContainer")
+        bound.styles.align = ("center", "middle")
+        self.disp = Label("HIDE")
+        bound.mount(self.disp)
+        
+        self.loader = LoadingIndicator()
+        self.LoadContainer.mount(self.loader)
+        self.LoadContainer.styles.align = ("center", "middle")
+
 class GoFishApp(App):
     """An App to display the current state of the go fish game"""
 
@@ -303,6 +376,9 @@ class GoFishApp(App):
         self.restartScreen.setParent(self)
         self.restartScreen.display = False
         yield self.restartScreen
+        self.loadScreen = LoadScreen()
+        self.loadScreen.display = False
+        yield self.loadScreen
 
 
     def action_toggle_dark(self) -> None:
@@ -315,17 +391,30 @@ class GoFishApp(App):
         self.cardRequest.display = False
         self.confirmDraw.display = False
 
+    def moveToNext(self, funcToMoveTo, word):
+        self.loadScreen.callBackFunction(funcToMoveTo)
+        self.loadScreen.setString(word)
+        self.loadScreen.display = True
+        self.cardRequest.display = False
+        self.confirmDraw.display = False
+        asyncio.create_task(self.loadScreen.startWaitForLoad())
+
+
     def remove_cardRequest(self):
+        self.loadScreen.display = False
+
         if len(deck) <= 0 or len(player) <= 0 or len(computer) <= 0:
             self.endScreeen()
             return
-        
+
         ComputerChoseCard()
         self.confirmDraw.ChangeText()
         self.cardRequest.display = False
         self.confirmDraw.display = True
 
     def remove_cardConfirm(self):
+        self.loadScreen.display = False
+
         if len(deck) <= 0 or len(player) <= 0 or len(computer) <= 0:
             self.endScreeen()
             return

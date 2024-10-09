@@ -137,6 +137,17 @@ def ComputerGoFish():
     
     checkHandLength()
 
+def checkPlayerHasCard():
+    """
+    check if the player has the card requested
+    """
+    value = computerRequest[: computerRequest.find(" ")]
+    # swap code
+    for n, card in enumerate(player):
+        if card.startswith(value):
+            return True
+    return False
+
 class AskForCard(Static):
     """The button of what card you would like to select"""
 
@@ -261,12 +272,20 @@ class ConfirmDraw(Static):
         text = ""
         # if pressed yes
         if event.button.id == "Yes":
-            CheckRequstCardComputer()
-            text = f"Recieves {computerRequest}"
+            if checkPlayerHasCard():
+                CheckRequstCardComputer()
+                text = f"Recieves {computerRequest}"
+            else:
+                self.request.update(f"Liar!")
+                return
         # if didnt press yes then it was "no"
         else:
-            ComputerGoFish()
-            text = "FISHING!"
+            if checkPlayerHasCard():
+                self.request.update(f"Liar!")
+                return
+            else:
+                ComputerGoFish()
+                text = "FISHING!"
         self.parentClass.moveToNext(self.parentClass.remove_cardConfirm, text)
 
     def on_mount(self):
@@ -302,13 +321,22 @@ class RestartScreen(Static):
     """
     def changeText(self):
         # set the text displayed on the end screen, winner, loser or draw
-        global player_pairs, computer_pairs
+        global player_pairs, computer_pairs, deck, player, computer
+        if len(deck) <= 0:
+            self.InfoText.update("The Deck is empty!")
+        elif len(player) <= 0:
+            self.InfoText.update("You Emptied your hand!")
+        elif len(computer) <= 0:
+            self.InfoText.update("the computer has an empty Hand!")
+        else:
+            self.InfoText.update("")
+        
         if len(player_pairs) == len(computer_pairs):
             self.winnerText.update("Draw! You both Suck")
         elif len(player_pairs) > len(computer_pairs):
-            self.winnerText.update("You Won, but barely")
+            self.winnerText.update(f"You Won! with {len(player_pairs)/2} pairs.")
         else:
-            self.winnerText.update("The Computer has proven it is superior\nby Winning")
+            self.winnerText.update(f"The Computer has proven it is superior\nby Winning\nThe computer had {len(computer_pairs)} pairs")
 
     def compose(self) -> ComposeResult:
         # initialise the button container
@@ -334,6 +362,9 @@ class RestartScreen(Static):
 
         self.buttons.append(Button(label="No", variant="error"))
         buttonContainer.mount(self.buttons[-1])
+
+        self.InfoText = Label("Info")
+        buttonContainer.mount(self.InfoText)
 
     def setParent(self,parent):
         # set the parent class
@@ -417,9 +448,11 @@ class GoFishApp(App):
 
     BINDINGS = [("d, D", "toggle_dark", "Toggle Dark mode")]
 
+
     def compose(self) -> ComposeResult:
         """make all the scrreens for the game"""
-        yield Header()
+        self.text = Header()
+        yield self.text
         yield Footer()
         self.cardRequest = AskForCard()
         self.cardRequest.setParent(self)
@@ -435,15 +468,21 @@ class GoFishApp(App):
         self.loadScreen = LoadScreen()
         self.loadScreen.display = False
         yield self.loadScreen
-
+        self.updateCardCounts()
 
     def action_toggle_dark(self) -> None:
         #change to dark mode
         self.dark = not self.dark
     
+    def updateCardCounts(self):
+        global deck, computer
+        self.title = "Card Amounts"
+        self.sub_title = f"Deck: {len(deck)} - Computer: {len(computer)}"
+
     def endScreeen(self):
         # move to the restart screen, hide other screens
         self.restartScreen.changeText()
+        self.updateCardCounts()
         self.restartScreen.display = True
         self.cardRequest.display = False
         self.confirmDraw.display = False
@@ -469,6 +508,7 @@ class GoFishApp(App):
         if len(deck) <= 0 or len(player) <= 0 or len(computer) <= 0:
             self.endScreeen()
             return
+        self.updateCardCounts()
 
         # make the computer chose a card (for the confirm screen)
         ComputerChoseCard()
@@ -485,6 +525,8 @@ class GoFishApp(App):
         if len(deck) <= 0 or len(player) <= 0 or len(computer) <= 0:
             self.endScreeen()
             return
+        
+        self.updateCardCounts()
         
         # set up the screenm, and show it
         self.cardRequest.redrawCards()

@@ -336,7 +336,7 @@ class RestartScreen(Static):
         elif len(player_pairs) > len(computer_pairs):
             self.winnerText.update(f"You Won! with {len(player_pairs)/2} pairs.")
         else:
-            self.winnerText.update(f"The Computer has proven it is superior\nby Winning\nThe computer had {len(computer_pairs)} pairs")
+            self.winnerText.update(f"The Computer has proven it is superior\nby Winning\nThe computer had {len(computer_pairs)/2} pairs")
 
     def compose(self) -> ComposeResult:
         # initialise the button container
@@ -351,6 +351,9 @@ class RestartScreen(Static):
         buttonContainer.styles.justify_content = "center"
         buttonContainer.styles.align_items = "center"
 
+        self.InfoText = Label("Info")
+        buttonContainer.mount(self.InfoText)
+
         self.winnerText = Label("WinnerText")
         buttonContainer.mount(self.winnerText)
 
@@ -362,9 +365,6 @@ class RestartScreen(Static):
 
         self.buttons.append(Button(label="No", variant="error"))
         buttonContainer.mount(self.buttons[-1])
-
-        self.InfoText = Label("Info")
-        buttonContainer.mount(self.InfoText)
 
     def setParent(self,parent):
         # set the parent class
